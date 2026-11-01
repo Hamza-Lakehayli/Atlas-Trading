@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { and, eq } from "drizzle-orm";
-import { db } from "../src/server/db";
+import { getDb } from "../src/server/db";
 import { auditLogs, categories, customers, idempotencyKeys, invoices, organizations, payments, products, salesOrderLines, salesOrders, stockLevels, stockMovements, users, warehouses } from "../src/server/db/schema";
 import { getMigrationDatabaseUrl } from "../src/lib/env";
 import { OrderDomainError, cancelOrder, confirmOrder, createDraftOrder, issueInvoice, recordPayment, shipOrder, type ServiceContext, updateDraftOrder } from "../src/server/services/orders";
@@ -26,6 +26,7 @@ async function expectCode(operation: Promise<unknown>, code: OrderDomainError["c
 
 async function main() {
   assertLocalDatabase();
+  const db = getDb();
   const testToken = crypto.randomUUID();
   const [org] = await db.insert(organizations).values({ name: `__local_order_test_${testToken}` }).returning();
   let productId: string | undefined;

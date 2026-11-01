@@ -1,13 +1,14 @@
 import "server-only";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { db } from "@/server/db";
+import { getDb } from "@/server/db";
 import { categories, products, stockLevels } from "@/server/db/schema";
 import { can, type AppRole } from "@/server/auth/permissions";
 import { withQueryTrace } from "@/server/observability/query-trace";
 
 export async function listProducts(input: { organizationId: string; role: AppRole }) {
   if (!can(input.role, "inventory:read")) throw new Error("FORBIDDEN");
+  const db = getDb();
   const showPrices = can(input.role, "dashboard:finance:read");
   const query = db.select({
       id: products.id,

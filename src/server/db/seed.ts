@@ -1,8 +1,8 @@
 import { faker } from "@faker-js/faker";
 import { and, eq } from "drizzle-orm";
-import { db, pool } from "./index";
+import { getDb, getPool } from "./index";
 import { categories, customers, organizations, products, stockLevels, stockMovements, users, warehouses } from "./schema";
-import { auth } from "@/server/auth/auth";
+import { getAuth } from "@/server/auth/auth";
 import { appRoles, type AppRole } from "@/server/auth/permissions";
 import { getMigrationDatabaseUrl, getServerEnv } from "@/lib/env";
 
@@ -26,8 +26,8 @@ const demoUsers: Array<{ name: string; email: string; appRole: AppRole; locale: 
   { name: "Lina Mansour", email: "viewer@atlas.demo", appRole: "viewer", locale: "en" },
 ];
 
-async function ensureDemoUser(organizationId: string, user: (typeof demoUsers)[number], password: string) {
-  const context = await auth.$context;
+async function ensureDemoUser(db: ReturnType<typeof getDb>, organizationId: string, user: (typeof demoUsers)[number], password: string) {
+  const context = await getAuth().$context;
   const existing = await context.internalAdapter.findUserByEmail(user.email);
   if (existing) {
     await db.update(users).set({ appRole: user.appRole, organizationId, locale: user.locale }).where(eq(users.id, existing.user.id));
@@ -54,6 +54,8 @@ async function ensureDemoUser(organizationId: string, user: (typeof demoUsers)[n
 async function main() {
   const env = getServerEnv();
   getMigrationDatabaseUrl();
+  activePool = getPool();
+  const db = getDb();
   if (env.DEMO_MODE !== "true") throw new Error("Seeding demo users requires DEMO_MODE=true.");
 
   const [existingOrg] = await db.select().from(organizations).where(eq(organizations.name, "Atlas Trading Co.")).limit(1);
@@ -155,16 +157,17 @@ async function main() {
 
   for (const role of appRoles) {
     const user = demoUsers.find((candidate) => candidate.appRole === role);
-    if (user) await ensureDemoUser(organization.id, user, env.DEMO_PASSWORD);
+    if (user) await ensureDemoUser(db, organization.id, user, env.DEMO_PASSWORD);
   }
 
   const customerCount = (await db.select({ id: customers.id }).from(customers).where(eq(customers.organizationId, organization.id))).length;
   console.info(`Seed complete: ${allProducts.length} products, ${categoryRows.length} categories, ${warehouseList.length} warehouses, ${customerCount} customers, ${demoUsers.length} demo roles (seed ${seed}).`);
 }
 
+let activePool: ReturnType<typeof getPool> | undefined;
 main().catch(() => {
   console.error("Seed failed. Confirm DEMO_MODE=true, matching PostgreSQL URLs, applied migrations, and demo settings. Run npm run db:check. No credentials are logged.");
   process.exitCode = 1;
 }).finally(async () => {
-  await pool.end();
+  if (activePool) await activePool.end();
 });

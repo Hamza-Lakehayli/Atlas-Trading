@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@/server/db";
+import { getDb } from "@/server/db";
 import {
   auditLogs,
   customers,
@@ -17,7 +17,8 @@ import {
 } from "@/server/db/schema";
 import { can, type AppRole } from "@/server/auth/permissions";
 
-type DatabaseTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type Database = ReturnType<typeof getDb>;
+type DatabaseTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 export type ServiceContext = {
   actorId: string;
@@ -70,6 +71,7 @@ async function runIdempotent(
   work: (tx: DatabaseTransaction) => Promise<string>,
 ) {
   const requestHash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+  const db = getDb();
   return db.transaction(async (tx) => {
     const [claim] = await tx.insert(idempotencyKeys).values({
       organizationId: context.organizationId,

@@ -1,5 +1,5 @@
 import { and, asc, count, eq, sql } from "drizzle-orm";
-import { db } from "@/server/db";
+import { getDb } from "@/server/db";
 import { customers, invoices, payments, products, salesOrderLines, salesOrders, warehouses } from "@/server/db/schema";
 import { can, type AppRole } from "@/server/auth/permissions";
 import { withQueryTrace } from "@/server/observability/query-trace";
@@ -20,6 +20,7 @@ function assertPermission(role: AppRole, permission: string) {
 
 export async function listSalesOrders(input: { organizationId: string; role: AppRole }) {
   assertPermission(input.role, "orders:read");
+  const db = getDb();
   const query = db.select({
     id: salesOrders.id,
     orderNumber: salesOrders.orderNumber,
@@ -48,6 +49,7 @@ export async function listSalesOrders(input: { organizationId: string; role: App
 
 export async function getOrderCreationOptions(input: { organizationId: string; role: AppRole }) {
   assertPermission(input.role, "orders:write");
+  const db = getDb();
   const customerQuery = db.select({ id: customers.id, name: customers.name }).from(customers)
     .where(eq(customers.organizationId, input.organizationId)).orderBy(asc(customers.name)).limit(200);
   const warehouseQuery = db.select({ id: warehouses.id, name: warehouses.name }).from(warehouses)
@@ -70,6 +72,7 @@ export async function getOrderCreationOptions(input: { organizationId: string; r
 
 export async function getSalesOrderDetail(input: { organizationId: string; role: AppRole; orderId: string }) {
   assertPermission(input.role, "orders:read");
+  const db = getDb();
   const orderQuery = db.select({
     id: salesOrders.id,
     orderNumber: salesOrders.orderNumber,

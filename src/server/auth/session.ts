@@ -1,11 +1,11 @@
 import "server-only";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "./auth";
+import { getAuth } from "./auth";
 import { isAppRole } from "./permissions";
 
 export async function getSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getAuth().api.getSession({ headers: await headers() });
   if (!session || !isAppRole(session.user.appRole)) return null;
   return session;
 }
