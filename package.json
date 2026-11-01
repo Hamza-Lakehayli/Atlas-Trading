@@ -20,6 +20,7 @@
     "db:setup": "npm run db:migrate && npm run db:seed",
     "verify:foundations": "tsx scripts/verify-foundations.ts",
     "verify:orders": "tsx scripts/verify-order-workflow.ts",
+    "verify:customers": "tsx scripts/verify-customers.ts",
     "test": "vitest run"
   },
   "dependencies": {

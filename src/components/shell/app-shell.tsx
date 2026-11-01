@@ -6,6 +6,8 @@ import { SignOutButton } from "@/components/shell/sign-out-button";
 import { LanguageSwitch } from "@/components/shell/language-switch";
 import { ThemeSwitch } from "@/components/shell/theme-switch";
 import { SearchCommand } from "@/components/shell/search-command";
+import { ActiveNavLink } from "@/components/shell/active-nav-link";
+import { CurrentBreadcrumb } from "@/components/shell/current-breadcrumb";
 import { ChartNoAxesCombined, CircleDollarSign, Command, Construction, LayoutDashboard, LockKeyhole, PackageSearch, UsersRound } from "lucide-react";
 
 type SessionUser = { name: string; email: string; appRole: string };
@@ -21,7 +23,8 @@ export async function AppShell({ children, locale, user }: {
   const roleKey = ({ admin: "admin", sales_manager: "salesManager", warehouse: "warehouse", accountant: "accountant", viewer: "viewer" } as const)[role];
   const primary = [
     { label: t("overview"), href: `/${locale}/dashboard`, icon: LayoutDashboard, active: true },
-    { label: t("sales"), href: `/${locale}/sales/orders`, icon: ChartNoAxesCombined, permission: "orders:read" },
+    { label: t("sales"), href: `/${locale}/sales/customers`, icon: ChartNoAxesCombined, permission: "customers:read" },
+    { label: t("orders"), href: `/${locale}/sales/orders`, icon: PackageSearch, permission: "orders:read" },
     { label: t("inventory"), href: `/${locale}/dashboard`, icon: PackageSearch, permission: "inventory:read", disabled: true },
     { label: t("finance"), href: `/${locale}/dashboard`, icon: CircleDollarSign, permission: "dashboard:finance:read", disabled: true },
   ];
@@ -43,7 +46,7 @@ export async function AppShell({ children, locale, user }: {
                 <Icon size={17} /><span>{item.label}</span><span className="nav-lock"><LockKeyhole size={12} /></span>
               </span>
             ) : (
-              <Link key={item.label} href={item.href} className={`nav-item ${item.active ? "nav-active" : ""}`}><Icon size={17} /><span>{item.label}</span></Link>
+              <ActiveNavLink key={item.label} href={item.href}><Icon size={17} /><span>{item.label}</span></ActiveNavLink>
             );
           })}
         </nav>
@@ -62,7 +65,7 @@ export async function AppShell({ children, locale, user }: {
 
       <div className="app-main">
         <header className="topbar">
-          <div className="breadcrumbs"><span>Atlas Trading Co.</span><span className="crumb-slash">/</span><b>{t("overview")}</b></div>
+          <CurrentBreadcrumb locale={locale} labels={{ overview: t("overview"), customers: t("customers"), orders: t("orders"), copilot: t("copilot") }} />
           <div className="topbar-actions"><SearchCommand locale={locale} showOrders={can(role, "orders:read")} /><span className="mobile-top-actions"><LanguageSwitch locale={locale} /><ThemeSwitch /><SignOutButton /></span><span className="topbar-divider" /><span className="topbar-user">{user.name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span></div>
         </header>
         <main className="page-content">{children}</main>

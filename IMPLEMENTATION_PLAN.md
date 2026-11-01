@@ -2,7 +2,7 @@
 
 > Implementation handoff for Luna.
 > Source: `spec/ERP Showcase — Product & Technical Spec.md`.
-> Status: Foundations and the order-to-payment vertical slice pass local PostgreSQL, integration, browser, and accessibility checks. Milestone 1 continues with the remaining Sales screens and executive dashboard; full Inventory and Finance modules follow later.
+> Status: Foundations and the order-to-payment vertical slice pass local PostgreSQL, integration, browser, and accessibility checks. The customer directory and detail pages are now implemented and verified locally. Milestone 1 continues with quotes, invoice screens, and the executive dashboard; full Inventory and Finance modules follow later.
 
 > **Current owner direction:** work locally using native PostgreSQL, without Docker. Use an isolated project cluster/database and leave existing services/data untouched. Later deploy the normal GitHub repository to Vercel Hobby (free tier), with Neon Free managed PostgreSQL. No cloud resources or paid plans now.
 
@@ -820,6 +820,6 @@ Consult current documentation for the pinned framework/library versions, follow 
 
 > Completed: local PostgreSQL setup, role login, bilingual shell, seeded catalogue, query instrumentation, and copilot placeholder.
 
-### Next bounded task: finish Milestone 1
+### Current checkpoint: customer directory and detail
 
-> Read the product spec and this plan. Finish Milestone 1 only: customer/quote/invoice Sales screens and URL-driven executive dashboard metrics/charts 1–5 with server-side permissions and drill-downs. Preserve the verified transaction-safe order workflow and its integration tests. Add historical seed data only via deterministic commands against the isolated local database. Do not begin full Inventory/Finance modules, simulation, or AI. Verify unit tests, PostgreSQL integration, browser behavior, accessibility, and production build before reporting Milestone 1 status.
+> Completed locally: organization-scoped customer search, segment filters, pagination, read-only account details, bounded order history, FR/EN copy, and role-aware navigation. No schema migration was needed. Next bounded task: implement the quote lifecycle and quote-to-order conversion with PostgreSQL transaction, audit, and idempotency coverage. Continue Milestone 1 only; do not begin full Inventory/Finance modules, simulation, or AI. Before pushing, run unit tests, PostgreSQL integration, browser behavior, accessibility, and production build locally.
