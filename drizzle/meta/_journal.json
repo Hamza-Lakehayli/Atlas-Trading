@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793469893945,
+      "tag": "0000_open_vance_astro",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793470957828,
+      "tag": "0001_productive_harry_osborn",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793477310920,
+      "tag": "0002_shiny_mimic",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793477382484,
+      "tag": "0003_broad_stardust",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793477420822,
+      "tag": "0004_normal_typhoid_mary",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793480437217,
+      "tag": "0005_normal_enchantress",
+      "breakpoints": true
+    }
+  ]
+}

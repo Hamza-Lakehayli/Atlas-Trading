@@ -1,0 +1,3 @@
+ALTER TABLE "products" ADD CONSTRAINT "products_nonnegative_money_ck" CHECK ("products"."unit_cost_minor" >= 0 AND "products"."unit_price_minor" >= 0);--> statement-breakpoint
+ALTER TABLE "products" ADD CONSTRAINT "products_nonnegative_reorder_point_ck" CHECK ("products"."reorder_point" >= 0);--> statement-breakpoint
+ALTER TABLE "stock_levels" ADD CONSTRAINT "stock_levels_nonnegative_quantity_ck" CHECK ("stock_levels"."quantity" >= 0);
