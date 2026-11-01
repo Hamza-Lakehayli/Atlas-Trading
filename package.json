@@ -35,6 +35,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@emnapi/core": "^1.11.3",
+    "@emnapi/runtime": "^1.11.3",
     "@faker-js/faker": "^10.6.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/turbopack": "^4",
@@ -44,6 +46,7 @@
     "@types/react-dom": "^19",
     "dotenv": "^18.0.9",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
