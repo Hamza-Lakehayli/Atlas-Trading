@@ -5,7 +5,11 @@ import { getAuth } from "./auth";
 import { isAppRole } from "./permissions";
 
 export async function getSession() {
-  const session = await getAuth().api.getSession({ headers: await headers() });
+  // Resolve the request-time API before initializing auth/database configuration.
+  // This keeps protected dynamic routes out of the static build when deployment
+  // environment variables have not been loaded into a prerender worker.
+  const requestHeaders = await headers();
+  const session = await getAuth().api.getSession({ headers: requestHeaders });
   if (!session || !isAppRole(session.user.appRole)) return null;
   return session;
 }
