@@ -15,17 +15,12 @@ import {
   stockMovements,
   warehouses,
 } from "@/server/db/schema";
-import { can, type AppRole } from "@/server/auth/permissions";
+import { can } from "@/server/auth/permissions";
+import type { ServiceContext } from "@/server/services/context";
+export type { ServiceContext } from "@/server/services/context";
 
 type Database = ReturnType<typeof getDb>;
 type DatabaseTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
-
-export type ServiceContext = {
-  actorId: string;
-  organizationId: string;
-  role: AppRole;
-  now?: () => Date;
-};
 
 export class OrderDomainError extends Error {
   constructor(readonly code: "VALIDATION_ERROR" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "INSUFFICIENT_STOCK" | "INVALID_TRANSITION", message: string) {

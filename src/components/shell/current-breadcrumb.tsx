@@ -4,10 +4,11 @@ import { usePathname } from "next/navigation";
 
 export function CurrentBreadcrumb({ locale, labels }: {
   locale: string;
-  labels: { overview: string; customers: string; orders: string; copilot: string };
+  labels: { overview: string; customers: string; quotes: string; orders: string; copilot: string };
 }) {
   const pathname = usePathname();
   const route = pathname.startsWith(`/${locale}/sales/customers`) ? labels.customers
+    : pathname.startsWith(`/${locale}/sales/quotes`) ? labels.quotes
     : pathname.startsWith(`/${locale}/sales/orders`) ? labels.orders
       : pathname.startsWith(`/${locale}/copilot`) ? labels.copilot
         : labels.overview;

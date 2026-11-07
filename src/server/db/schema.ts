@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -127,12 +128,52 @@ export const warehouses = pgTable("warehouses", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [uniqueIndex("warehouses_org_name_uidx").on(table.organizationId, table.name)]);
 
+export const quotes = pgTable("quotes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  quoteNumber: text("quote_number").notNull(),
+  customerId: uuid("customer_id").notNull().references(() => customers.id),
+  warehouseId: uuid("warehouse_id").notNull().references(() => warehouses.id),
+  status: text("status").notNull().default("draft"),
+  validUntil: date("valid_until", { mode: "string" }).notNull(),
+  createdBy: text("created_by").notNull().references(() => users.id),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+  convertedAt: timestamp("converted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("quotes_org_number_uidx").on(table.organizationId, table.quoteNumber),
+  index("quotes_org_status_date_idx").on(table.organizationId, table.status, table.createdAt),
+  index("quotes_org_customer_date_idx").on(table.organizationId, table.customerId, table.createdAt),
+  check("quotes_status_ck", sql`${table.status} IN ('draft','sent','accepted','rejected','converted')`),
+]);
+
+export const quoteLines = pgTable("quote_lines", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  quoteId: uuid("quote_id").notNull().references(() => quotes.id),
+  productId: uuid("product_id").notNull().references(() => products.id),
+  skuSnapshot: text("sku_snapshot").notNull(),
+  productNameSnapshot: text("product_name_snapshot").notNull(),
+  quantity: integer("quantity").notNull(),
+  unitPriceMinor: integer("unit_price_minor").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("quote_lines_quote_product_uidx").on(table.quoteId, table.productId),
+  index("quote_lines_org_quote_idx").on(table.organizationId, table.quoteId),
+  check("quote_lines_quantity_ck", sql`${table.quantity} > 0`),
+  check("quote_lines_price_ck", sql`${table.unitPriceMinor} >= 0`),
+]);
+
 export const salesOrders = pgTable("sales_orders", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id),
   orderNumber: text("order_number").notNull(),
   customerId: uuid("customer_id").notNull().references(() => customers.id),
   warehouseId: uuid("warehouse_id").notNull().references(() => warehouses.id),
+  sourceQuoteId: uuid("source_quote_id").references(() => quotes.id),
   status: text("status").notNull().default("draft"),
   orderDate: timestamp("order_date", { withTimezone: true }).defaultNow().notNull(),
   promisedDate: timestamp("promised_date", { withTimezone: true }),
@@ -148,6 +189,7 @@ export const salesOrders = pgTable("sales_orders", {
   uniqueIndex("sales_orders_org_number_uidx").on(table.organizationId, table.orderNumber),
   index("sales_orders_org_status_date_idx").on(table.organizationId, table.status, table.orderDate),
   index("sales_orders_customer_idx").on(table.organizationId, table.customerId, table.orderDate),
+  uniqueIndex("sales_orders_org_source_quote_uidx").on(table.organizationId, table.sourceQuoteId),
   check("sales_orders_status_ck", sql`${table.status} IN ('draft','confirmed','shipped','invoiced','paid','cancelled')`),
 ]);
 

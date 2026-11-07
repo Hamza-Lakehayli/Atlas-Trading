@@ -43,6 +43,13 @@
       "when": 1793480437217,
       "tag": "0005_normal_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794065185386,
+      "tag": "0006_cooing_the_spike",
+      "breakpoints": true
     }
   ]
 }

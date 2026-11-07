@@ -1,7 +1,7 @@
 import "server-only";
 import { getSession } from "./session";
 import { isAppRole } from "./permissions";
-import type { ServiceContext } from "@/server/services/orders";
+import type { ServiceContext } from "@/server/services/context";
 
 export async function getServiceContext(): Promise<ServiceContext> {
   const session = await getSession();

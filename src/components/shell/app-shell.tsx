@@ -8,7 +8,7 @@ import { ThemeSwitch } from "@/components/shell/theme-switch";
 import { SearchCommand } from "@/components/shell/search-command";
 import { ActiveNavLink } from "@/components/shell/active-nav-link";
 import { CurrentBreadcrumb } from "@/components/shell/current-breadcrumb";
-import { ChartNoAxesCombined, CircleDollarSign, Command, Construction, LayoutDashboard, LockKeyhole, PackageSearch, UsersRound } from "lucide-react";
+import { ChartNoAxesCombined, CircleDollarSign, Command, Construction, FileText, LayoutDashboard, LockKeyhole, PackageSearch, UsersRound } from "lucide-react";
 
 type SessionUser = { name: string; email: string; appRole: string };
 
@@ -24,6 +24,7 @@ export async function AppShell({ children, locale, user }: {
   const primary = [
     { label: t("overview"), href: `/${locale}/dashboard`, icon: LayoutDashboard, active: true },
     { label: t("sales"), href: `/${locale}/sales/customers`, icon: ChartNoAxesCombined, permission: "customers:read" },
+    { label: t("quotes"), href: `/${locale}/sales/quotes`, icon: FileText, permission: "quotes:read" },
     { label: t("orders"), href: `/${locale}/sales/orders`, icon: PackageSearch, permission: "orders:read" },
     { label: t("inventory"), href: `/${locale}/dashboard`, icon: PackageSearch, permission: "inventory:read", disabled: true },
     { label: t("finance"), href: `/${locale}/dashboard`, icon: CircleDollarSign, permission: "dashboard:finance:read", disabled: true },
@@ -65,8 +66,8 @@ export async function AppShell({ children, locale, user }: {
 
       <div className="app-main">
         <header className="topbar">
-          <CurrentBreadcrumb locale={locale} labels={{ overview: t("overview"), customers: t("customers"), orders: t("orders"), copilot: t("copilot") }} />
-          <div className="topbar-actions"><SearchCommand locale={locale} showOrders={can(role, "orders:read")} /><span className="mobile-top-actions"><LanguageSwitch locale={locale} /><ThemeSwitch /><SignOutButton /></span><span className="topbar-divider" /><span className="topbar-user">{user.name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span></div>
+          <CurrentBreadcrumb locale={locale} labels={{ overview: t("overview"), customers: t("customers"), quotes: t("quotes"), orders: t("orders"), copilot: t("copilot") }} />
+          <div className="topbar-actions"><SearchCommand locale={locale} showCustomers={can(role, "customers:read")} showQuotes={can(role, "quotes:read")} showOrders={can(role, "orders:read")} /><span className="mobile-top-actions"><LanguageSwitch locale={locale} /><ThemeSwitch /><SignOutButton /></span><span className="topbar-divider" /><span className="topbar-user">{user.name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span></div>
         </header>
         <main className="page-content">{children}</main>
       </div>

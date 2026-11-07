@@ -16,7 +16,13 @@ describe("application role permissions", () => {
   it("separates sales, warehouse, invoicing, and payment responsibilities", () => {
     expect(can("sales_manager", "customers:read")).toBe(true);
     expect(can("admin", "customers:read")).toBe(true);
+    expect(can("sales_manager", "quotes:read")).toBe(true);
+    expect(can("sales_manager", "quotes:write")).toBe(true);
+    expect(can("admin", "quotes:write")).toBe(true);
+    expect(can("accountant", "quotes:read")).toBe(true);
+    expect(can("accountant", "quotes:write")).toBe(false);
     expect(can("warehouse", "customers:read")).toBe(false);
+    expect(can("warehouse", "quotes:read")).toBe(false);
     expect(can("accountant", "customers:read")).toBe(false);
     expect(can("viewer", "customers:read")).toBe(false);
     expect(can("sales_manager", "orders:write")).toBe(true);

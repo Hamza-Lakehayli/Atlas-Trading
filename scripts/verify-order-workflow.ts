@@ -3,7 +3,8 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "../src/server/db";
 import { auditLogs, categories, customers, idempotencyKeys, invoices, organizations, payments, products, salesOrderLines, salesOrders, stockLevels, stockMovements, users, warehouses } from "../src/server/db/schema";
 import { getMigrationDatabaseUrl } from "../src/lib/env";
-import { OrderDomainError, cancelOrder, confirmOrder, createDraftOrder, issueInvoice, recordPayment, shipOrder, type ServiceContext, updateDraftOrder } from "../src/server/services/orders";
+import { type ServiceContext } from "../src/server/services/context";
+import { OrderDomainError, cancelOrder, confirmOrder, createDraftOrder, issueInvoice, recordPayment, shipOrder, updateDraftOrder } from "../src/server/services/orders";
 import { getSalesOrderDetail, listSalesOrders } from "../src/server/queries/orders";
 
 function assertLocalDatabase() {

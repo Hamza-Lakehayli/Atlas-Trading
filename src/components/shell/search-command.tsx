@@ -5,16 +5,18 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Command, Search, X } from "lucide-react";
 
-export function SearchCommand({ locale, showOrders }: { locale: string; showOrders: boolean }) {
+export function SearchCommand({ locale, showCustomers, showOrders, showQuotes }: { locale: string; showCustomers: boolean; showOrders: boolean; showQuotes: boolean }) {
   const t = useTranslations("common");
   const nav = useTranslations("nav");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const links = useMemo(() => [
     { label: nav("overview"), href: `/${locale}/dashboard`, icon: Search },
-    ...(showOrders ? [{ label: nav("sales"), href: `/${locale}/sales/orders`, icon: Search }] : []),
+    ...(showCustomers ? [{ label: nav("sales"), href: `/${locale}/sales/customers`, icon: Search }] : []),
+    ...(showQuotes ? [{ label: nav("quotes"), href: `/${locale}/sales/quotes`, icon: Search }] : []),
+    ...(showOrders ? [{ label: nav("orders"), href: `/${locale}/sales/orders`, icon: Search }] : []),
     { label: nav("copilot"), href: `/${locale}/copilot`, icon: Command },
-  ].filter((link) => link.label.toLowerCase().includes(query.trim().toLowerCase())), [locale, nav, query, showOrders]);
+  ].filter((link) => link.label.toLowerCase().includes(query.trim().toLowerCase())), [locale, nav, query, showCustomers, showOrders, showQuotes]);
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -28,8 +30,8 @@ export function SearchCommand({ locale, showOrders }: { locale: string; showOrde
   }, []);
 
   return <>
-      <button className="search-trigger" onClick={() => { setQuery(""); setOpen(true); }} aria-label={`${t("search")} (Ctrl K)`}>
-      <Search size={16} /><span>{t("search")}</span><kbd><Command size={10} /> K</kbd>
+      <button className="search-trigger" onClick={() => { setQuery(""); setOpen(true); }} aria-label={t("search")}>
+      <Search size={16} /><span>{t("search")}</span>
     </button>
     {open && <div className="command-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <section className="command-dialog" role="dialog" aria-modal="true" aria-label={t("search")}>

@@ -1,5 +1,19 @@
 # Initial business workflow contracts
 
+## Sales quote lifecycle
+
+```text
+draft → sent → accepted → converted to a draft order
+                  └────→ rejected
+```
+
+- Draft quotes may be edited; sending freezes their customer, warehouse, product, quantity, and price snapshots.
+- A sent quote can be accepted or rejected through the `valid_until` date in the `Africa/Casablanca` business timezone. Once acceptance has been recorded in time, conversion may happen later.
+- Converting an accepted quote creates one editable sales-order draft and copies the stored quote prices, not current catalogue prices.
+- Quote state, the converted order, audit entries, and idempotency result commit in the same PostgreSQL transaction.
+- Sending is a recorded demo event only; no email is sent.
+- Quote reads are available to Admin, Sales Manager, and Accountant roles. Quote writes are limited to Admin and Sales Manager; conversion also requires permission to create orders.
+
 ## Sales order lifecycle
 
 ```text

@@ -21,6 +21,7 @@
     "verify:foundations": "tsx scripts/verify-foundations.ts",
     "verify:orders": "tsx scripts/verify-order-workflow.ts",
     "verify:customers": "tsx scripts/verify-customers.ts",
+    "verify:quotes": "tsx scripts/verify-quotes.ts",
     "test": "vitest run"
   },
   "dependencies": {
