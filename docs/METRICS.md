@@ -25,6 +25,7 @@ These are the initial implementation definitions. Keep dashboard cards, charts, 
 - AR aging has a separate not-yet-due bucket and nonoverlapping overdue buckets: 1–30, 31–60, 61–90, 91+ days.
 - Funnel conversion uses one quote cohort and its downstream outcomes.
 - Distinct order totals must not be calculated by adding category-level distinct-order counts.
+- Product/category invoice drill-downs preserve the full invoice amount and payment balance, while displaying a separate matching-line revenue subtotal that reconciles to the line-based dashboard metric. Do not allocate payments or receivables to product/category without an explicit allocation model.
 
 ## Filter applicability
 
@@ -36,3 +37,5 @@ These are the initial implementation definitions. Keep dashboard cards, charts, 
 | Inventory health/value | Yes | Yes | No | Customer segment is not meaningful without an allocation model. |
 
 Unsupported filters must be disabled or clearly identified. Never silently ignore a filter.
+
+DSO follows the receivables filter scope: it is unavailable whenever warehouse or category is selected, because receivables are not allocated to either dimension. Segment and date/as-of scopes remain supported.

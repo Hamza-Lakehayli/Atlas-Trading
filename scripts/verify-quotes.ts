@@ -3,23 +3,30 @@ import { and, eq, inArray } from "drizzle-orm";
 import { businessDate } from "../src/lib/dates/business-date";
 import { getMigrationDatabaseUrl, getServerEnv } from "../src/lib/env";
 import { parseQuoteFilters } from "../src/lib/quotes/filters";
+import { parseDashboardFilters } from "../src/lib/dashboard/filters";
 import { getDb } from "../src/server/db";
 import {
   auditLogs,
   categories,
   customers,
+  invoices,
   idempotencyKeys,
   organizations,
+  payments,
   products,
   quoteLines,
   quotes,
   salesOrderLines,
   salesOrders,
+  stockLevels,
+  stockMovements,
   users,
   warehouses,
 } from "../src/server/db/schema";
 import { getQuoteDetail, listQuotes } from "../src/server/queries/quotes";
+import { getQuoteFunnel } from "../src/server/queries/dashboard";
 import { type ServiceContext } from "../src/server/services/context";
+import { confirmOrder, issueInvoice, recordPayment, shipOrder } from "../src/server/services/orders";
 import { acceptQuote, convertAcceptedQuoteToOrder, createDraftQuote, QuoteDomainError, rejectQuote, sendQuote, updateDraftQuote } from "../src/server/services/quotes";
 
 function addDays(date: string, days: number) {
@@ -69,13 +76,18 @@ async function main() {
       { id: warehouseId, name: "Local warehouse test", email: `quote-warehouse-${token}@atlas.invalid`, emailVerified: true, appRole: "warehouse", organizationId: organization.id, locale: "en" },
     ]).returning();
     const [category] = await db.insert(categories).values({ organizationId: organization.id, name: `Quote test ${token}` }).returning();
+    const [secondCategory] = await db.insert(categories).values({ organizationId: organization.id, name: `Quote test other category ${token}` }).returning();
     const [warehouse] = await db.insert(warehouses).values({ organizationId: organization.id, name: "Quote test warehouse", city: "Casablanca" }).returning();
     const [customer] = await db.insert(customers).values({ organizationId: organization.id, name: "Quote test customer", segment: "Retail", city: "Casablanca" }).returning();
     const productsCreated = await db.insert(products).values([
       { organizationId: organization.id, categoryId: category.id, sku: `QT-A-${token.slice(0, 8)}`, name: "Quoted product A", unitCostMinor: 400, unitPriceMinor: 1000 },
-      { organizationId: organization.id, categoryId: category.id, sku: `QT-B-${token.slice(0, 8)}`, name: "Quoted product B", unitCostMinor: 800, unitPriceMinor: 2500 },
+      { organizationId: organization.id, categoryId: secondCategory.id, sku: `QT-B-${token.slice(0, 8)}`, name: "Quoted product B", unitCostMinor: 800, unitPriceMinor: 2500 },
     ]).returning();
     const [productA, productB] = productsCreated;
+    await db.insert(stockLevels).values([
+      { organizationId: organization.id, productId: productA.id, warehouseId: warehouse.id, quantity: 20, averageUnitCostMinor: 400 },
+      { organizationId: organization.id, productId: productB.id, warehouseId: warehouse.id, quantity: 20, averageUnitCostMinor: 800 },
+    ]);
     const context: ServiceContext = { actorId: admin.id, organizationId: organization.id, role: "admin" };
     const warehouseContext: ServiceContext = { actorId: warehouseActor.id, organizationId: organization.id, role: "warehouse" };
     const key = () => crypto.randomUUID();
@@ -145,6 +157,11 @@ async function main() {
     const afterConversion = await getQuoteDetail({ organizationId: organization.id, role: "admin", quoteId: created.resourceId });
     assert.equal(afterConversion?.quote.status, "converted");
     assert.equal(afterConversion?.order?.id, converted.resourceId);
+    await confirmOrder(context, { orderId: converted.resourceId, idempotencyKey: key() });
+    await shipOrder(context, { orderId: converted.resourceId, idempotencyKey: key() });
+    const issuedInvoice = await issueInvoice(context, { orderId: converted.resourceId, idempotencyKey: key() });
+    await recordPayment(context, { orderId: converted.resourceId, amountMinor: 5_500, method: "bank_transfer", idempotencyKey: key() });
+    assert.ok(issuedInvoice.resourceId);
 
     const rejectDraft = await createDraftQuote(context, {
       customerId: customer.id,
@@ -167,6 +184,29 @@ async function main() {
     });
     await sendQuote(context, { quoteId: unavailableProductQuote.resourceId, idempotencyKey: key() });
     await acceptQuote(context, { quoteId: unavailableProductQuote.resourceId, idempotencyKey: key() });
+
+    const funnelFilters = parseDashboardFilters({
+      from: today, to: today, compare: "none", warehouseId: warehouse.id,
+      categoryId: "all", segment: "Retail", granularity: "daily",
+    });
+    assert.ok(funnelFilters.success);
+    const funnel = await getQuoteFunnel({ organizationId: organization.id, role: "admin", filters: funnelFilters.data });
+    assert.equal(funnel.stages.find((stage) => stage.key === "created")?.count, 3);
+    assert.equal(funnel.stages.find((stage) => stage.key === "sent")?.count, 3);
+    assert.equal(funnel.stages.find((stage) => stage.key === "accepted")?.count, 2);
+    assert.equal(funnel.stages.find((stage) => stage.key === "converted")?.count, 1);
+    assert.equal(funnel.stages.find((stage) => stage.key === "invoiced")?.count, 1);
+    assert.equal(funnel.stages.find((stage) => stage.key === "paid")?.count, 1);
+    for (const stage of funnel.stages) {
+      const stageFilters = parseQuoteFilters({
+        from: today, to: today, warehouseId: warehouse.id, segment: "Retail",
+        funnelStage: stage.key, page: "1",
+      });
+      assert.ok(stageFilters.success);
+      const stageQuotes = await listQuotes({ organizationId: organization.id, role: "admin", filters: stageFilters.data });
+      assert.equal(stageQuotes.total, stage.count, `Quote funnel ${stage.key} stage must match its list drill-down`);
+    }
+
     await db.update(products).set({ active: false }).where(eq(products.id, productB.id));
     const failedConversionKey = key();
     await expectCode(convertAcceptedQuoteToOrder(context, { quoteId: unavailableProductQuote.resourceId, idempotencyKey: failedConversionKey }), "CONFLICT");
@@ -193,6 +233,15 @@ async function main() {
     assert.ok(parsedFilters.success);
     const convertedPage = await listQuotes({ organizationId: organization.id, role: "admin", filters: parsedFilters.data });
     assert.equal(convertedPage.total, 1);
+    const drilldownFilters = parseQuoteFilters({
+      status: "converted", from: today, to: today, warehouseId: warehouse.id,
+      categoryId: category.id, segment: "Retail",
+    });
+    assert.ok(drilldownFilters.success);
+    const dashboardDrilldown = await listQuotes({ organizationId: organization.id, role: "admin", filters: drilldownFilters.data });
+    assert.equal(dashboardDrilldown.total, 1, "Quote cohort drill-down preserves date and dimension filters");
+    assert.equal(dashboardDrilldown.rows[0]?.lineCount, 2);
+    assert.equal(dashboardDrilldown.rows[0]?.totalMinor, 5_500, "Category filtering keeps the full commercial quote total");
     const accountantPage = await listQuotes({ organizationId: organization.id, role: "accountant", filters: parsedFilters.data });
     assert.equal(accountantPage.total, 1);
     await assert.rejects(getQuoteDetail({ organizationId: organization.id, role: "warehouse", quoteId: created.resourceId }), /FORBIDDEN/);
@@ -209,6 +258,10 @@ async function main() {
     const listing = await fetch(`${origin}/en/sales/quotes`, { headers: { Cookie: salesCookie } });
     assert.equal(listing.status, 200);
     assert.match(await listing.text(), /Sales quotes/);
+    const emptyQuoteControls = new URLSearchParams({ q: "Atlas", status: "all", from: "", to: "", warehouseId: "", categoryId: "", segment: "", page: "1" });
+    const nativeFormSubmit = await fetch(`${origin}/en/sales/quotes?${emptyQuoteControls}`, { headers: { Cookie: salesCookie } });
+    assert.equal(nativeFormSubmit.status, 200, "Native quote GET filters accept blank optional controls");
+    assert.doesNotMatch(await nativeFormSubmit.text(), /class="customer-filter-error"/);
     const malformedFilters = await fetch(`${origin}/en/sales/quotes?status=unknown`, { headers: { Cookie: salesCookie } });
     assert.equal(malformedFilters.status, 200);
     assert.match(await malformedFilters.text(), /These quote filters aren.t valid/);
@@ -222,8 +275,12 @@ async function main() {
   } finally {
     await db.delete(auditLogs).where(eq(auditLogs.organizationId, organization.id));
     await db.delete(idempotencyKeys).where(eq(idempotencyKeys.organizationId, organization.id));
+    await db.delete(payments).where(eq(payments.organizationId, organization.id));
+    await db.delete(invoices).where(eq(invoices.organizationId, organization.id));
+    await db.delete(stockMovements).where(eq(stockMovements.organizationId, organization.id));
     await db.delete(salesOrderLines).where(eq(salesOrderLines.organizationId, organization.id));
     await db.delete(salesOrders).where(eq(salesOrders.organizationId, organization.id));
+    await db.delete(stockLevels).where(eq(stockLevels.organizationId, organization.id));
     await db.delete(quoteLines).where(eq(quoteLines.organizationId, organization.id));
     await db.delete(quotes).where(eq(quotes.organizationId, organization.id));
     await db.delete(products).where(eq(products.organizationId, organization.id));
@@ -257,13 +314,13 @@ async function main() {
   let browserOrderId: string | undefined;
   try {
     const salesCookie = await signedInCookie(origin, "sales@atlas.demo", env.DEMO_PASSWORD);
-    const englishDetail = await fetch(`${origin}/en/sales/quotes/${browserQuote.resourceId}?q=Altenwerth&status=draft&page=2&error=CONFLICT`, { headers: { Cookie: salesCookie } });
+    const englishDetail = await fetch(`${origin}/en/sales/quotes/${browserQuote.resourceId}?q=Altenwerth&status=draft&funnelStage=paid&page=2&error=CONFLICT`, { headers: { Cookie: salesCookie } });
     assert.equal(englishDetail.status, 200);
     const englishHtml = await englishDetail.text();
     assert.match(englishHtml, /QUOTE RECORD/);
     assert.match(englishHtml, /Send quote/);
     assert.match(englishHtml, /Quote lines/);
-    assert.match(englishHtml, /href="\/en\/sales\/quotes\?q=Altenwerth&amp;status=draft&amp;page=2"/);
+    assert.match(englishHtml, /href="\/en\/sales\/quotes\?q=Altenwerth&amp;status=draft&amp;funnelStage=paid&amp;page=2"/);
     const frenchDetail = await fetch(`${origin}/fr/sales/quotes/${browserQuote.resourceId}`, { headers: { Cookie: salesCookie } });
     assert.equal(frenchDetail.status, 200);
     assert.match(await frenchDetail.text(), /FICHE DE DEVIS/);

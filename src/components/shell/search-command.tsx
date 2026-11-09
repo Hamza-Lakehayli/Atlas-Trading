@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Command, Search, X } from "lucide-react";
 
-export function SearchCommand({ locale, showCustomers, showOrders, showQuotes }: { locale: string; showCustomers: boolean; showOrders: boolean; showQuotes: boolean }) {
+export function SearchCommand({ locale, showCustomers, showInvoices, showOrders, showQuotes }: { locale: string; showCustomers: boolean; showInvoices: boolean; showOrders: boolean; showQuotes: boolean }) {
   const t = useTranslations("common");
   const nav = useTranslations("nav");
   const [open, setOpen] = useState(false);
@@ -14,9 +14,10 @@ export function SearchCommand({ locale, showCustomers, showOrders, showQuotes }:
     { label: nav("overview"), href: `/${locale}/dashboard`, icon: Search },
     ...(showCustomers ? [{ label: nav("sales"), href: `/${locale}/sales/customers`, icon: Search }] : []),
     ...(showQuotes ? [{ label: nav("quotes"), href: `/${locale}/sales/quotes`, icon: Search }] : []),
+    ...(showInvoices ? [{ label: nav("invoices"), href: `/${locale}/sales/invoices`, icon: Search }] : []),
     ...(showOrders ? [{ label: nav("orders"), href: `/${locale}/sales/orders`, icon: Search }] : []),
     { label: nav("copilot"), href: `/${locale}/copilot`, icon: Command },
-  ].filter((link) => link.label.toLowerCase().includes(query.trim().toLowerCase())), [locale, nav, query, showCustomers, showOrders, showQuotes]);
+  ].filter((link) => link.label.toLowerCase().includes(query.trim().toLowerCase())), [locale, nav, query, showCustomers, showInvoices, showOrders, showQuotes]);
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {

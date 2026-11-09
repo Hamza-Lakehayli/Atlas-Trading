@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { parseMadAmount } from "@/lib/money/input";
+import { parseOrderLines } from "@/lib/orders/form-lines";
 import { getServiceContext } from "@/server/auth/service-context";
 import {
   cancelOrder,
@@ -54,9 +55,8 @@ export async function createOrderAction(formData: FormData) {
   const key = uuidSchema.safeParse(field(formData, "idempotencyKey"));
   const customerId = uuidSchema.safeParse(field(formData, "customerId"));
   const warehouseId = uuidSchema.safeParse(field(formData, "warehouseId"));
-  const productId = uuidSchema.safeParse(field(formData, "productId"));
-  const quantity = z.coerce.number().int().positive().max(999).safeParse(field(formData, "quantity"));
-  if (!key.success || !customerId.success || !warehouseId.success || !productId.success || !quantity.success) {
+  const lines = parseOrderLines(formData);
+  if (!key.success || !customerId.success || !warehouseId.success || !lines) {
     redirect(`/${locale}/sales/orders?error=VALIDATION_ERROR`);
   }
   try {
@@ -64,7 +64,7 @@ export async function createOrderAction(formData: FormData) {
     const result = await createDraftOrder(context, {
       customerId: customerId.data,
       warehouseId: warehouseId.data,
-      lines: [{ productId: productId.data, quantity: quantity.data }],
+      lines,
       idempotencyKey: key.data,
     });
     revalidatePath(`/${locale}/sales/orders`);
@@ -79,9 +79,8 @@ export async function updateDraftOrderAction(formData: FormData) {
   const { locale, orderId, key } = parseMutationFields(formData);
   const customerId = uuidSchema.safeParse(field(formData, "customerId"));
   const warehouseId = uuidSchema.safeParse(field(formData, "warehouseId"));
-  const productId = uuidSchema.safeParse(field(formData, "productId"));
-  const quantity = z.coerce.number().int().positive().max(999).safeParse(field(formData, "quantity"));
-  if (!customerId.success || !warehouseId.success || !productId.success || !quantity.success) {
+  const lines = parseOrderLines(formData);
+  if (!customerId.success || !warehouseId.success || !lines) {
     redirect(`/${locale}/sales/orders/${orderId}?error=VALIDATION_ERROR`);
   }
   const path = `/${locale}/sales/orders/${orderId}`;
@@ -92,7 +91,7 @@ export async function updateDraftOrderAction(formData: FormData) {
       idempotencyKey: key,
       customerId: customerId.data,
       warehouseId: warehouseId.data,
-      lines: [{ productId: productId.data, quantity: quantity.data }],
+      lines,
     });
     revalidatePath(path);
     revalidatePath(`/${locale}/sales/orders`);

@@ -14,6 +14,18 @@ describe("quote directory URL filters", () => {
     expect(parseQuoteFilters({ status: "expired" }).success).toBe(true);
   });
 
+  it("keeps dashboard cohort dates on quote drill-downs", () => {
+    expect(parseQuoteFilters({ from: "2026-10-01", to: "2026-10-31", status: "converted" })).toMatchObject({
+      success: true,
+      data: { from: "2026-10-01", to: "2026-10-31", status: "converted" },
+    });
+    expect(parseQuoteFilters({ from: "2026-10-01" }).success).toBe(false);
+    expect(parseQuoteFilters({ from: "2026-10-30", to: "2026-10-01" }).success).toBe(false);
+    expect(parseQuoteFilters({ from: "2026-02-30", to: "2026-03-01" }).success).toBe(false);
+    expect(parseQuoteFilters({ funnelStage: "paid" })).toMatchObject({ success: true, data: { funnelStage: "paid" } });
+    expect(parseQuoteFilters({ funnelStage: "in-transit" }).success).toBe(false);
+  });
+
   it("rejects malformed, repeated, unsupported, and excessive parameters", () => {
     expect(parseQuoteFilters({ status: "pending" }).success).toBe(false);
     expect(parseQuoteFilters({ page: "0" }).success).toBe(false);
@@ -21,5 +33,11 @@ describe("quote directory URL filters", () => {
     expect(parseQuoteFilters({ q: "x".repeat(81) }).success).toBe(false);
     expect(parseQuoteFilters({ q: ["one", "two"] }).success).toBe(false);
     expect(parseQuoteFilters({ ignored: "value" }).success).toBe(false);
+  });
+
+  it("accepts blank optional controls from the native GET filter form", () => {
+    expect(parseQuoteFilters({
+      q: "Atlas", status: "all", from: "", to: "", warehouseId: "", categoryId: "", segment: "", page: "1",
+    })).toMatchObject({ success: true, data: { q: "Atlas", status: "all", page: 1 } });
   });
 });

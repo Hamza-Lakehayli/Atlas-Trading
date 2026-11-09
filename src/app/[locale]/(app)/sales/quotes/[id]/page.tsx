@@ -26,12 +26,24 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
   const parsedListFilters = parseQuoteFilters({
     q: paramsFromList.q,
     status: paramsFromList.status,
+    funnelStage: paramsFromList.funnelStage,
     page: paramsFromList.page,
+    from: paramsFromList.from,
+    to: paramsFromList.to,
+    warehouseId: paramsFromList.warehouseId,
+    categoryId: paramsFromList.categoryId,
+    segment: paramsFromList.segment,
   });
   const backQuery = new URLSearchParams();
   if (parsedListFilters.success) {
     if (parsedListFilters.data.q) backQuery.set("q", parsedListFilters.data.q);
     if (parsedListFilters.data.status !== "all") backQuery.set("status", parsedListFilters.data.status);
+    if (parsedListFilters.data.funnelStage) backQuery.set("funnelStage", parsedListFilters.data.funnelStage);
+    if (parsedListFilters.data.from) backQuery.set("from", parsedListFilters.data.from);
+    if (parsedListFilters.data.to) backQuery.set("to", parsedListFilters.data.to);
+    if (parsedListFilters.data.warehouseId) backQuery.set("warehouseId", parsedListFilters.data.warehouseId);
+    if (parsedListFilters.data.categoryId) backQuery.set("categoryId", parsedListFilters.data.categoryId);
+    if (parsedListFilters.data.segment) backQuery.set("segment", parsedListFilters.data.segment);
     if (parsedListFilters.data.page > 1) backQuery.set("page", String(parsedListFilters.data.page));
   }
   const backQueryString = backQuery.toString();

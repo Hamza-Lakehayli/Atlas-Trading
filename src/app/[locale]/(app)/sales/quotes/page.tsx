@@ -19,11 +19,18 @@ export default async function QuotesPage({ params, searchParams }: Props) {
   if (!isAppRole(session.user.appRole) || !session.user.organizationId || !can(session.user.appRole, "quotes:read")) notFound();
   const t = await getTranslations("quotes");
   const rawSearchParams = await searchParams;
-  const parsed = parseQuoteFilters(rawSearchParams);
+  const quoteFilterKeys = new Set(["q", "status", "funnelStage", "from", "to", "warehouseId", "categoryId", "segment", "page", "error"]);
+  const unknownFilters = Object.fromEntries(Object.entries(rawSearchParams).filter(([key]) => !quoteFilterKeys.has(key)));
+  const parsed = parseQuoteFilters({
+    q: rawSearchParams.q, status: rawSearchParams.status, funnelStage: rawSearchParams.funnelStage, from: rawSearchParams.from, to: rawSearchParams.to,
+    warehouseId: rawSearchParams.warehouseId, categoryId: rawSearchParams.categoryId, segment: rawSearchParams.segment,
+    page: rawSearchParams.page,
+    ...unknownFilters,
+  });
   const result = parsed.success
     ? await listQuotes({ organizationId: session.user.organizationId, role: session.user.appRole, filters: parsed.data })
     : null;
-  const filters = parsed.success ? parsed.data : { q: "", status: "all" as const, page: 1 };
+  const filters = parsed.success ? parsed.data : { q: "", status: "all" as const, funnelStage: undefined, page: 1, from: undefined, to: undefined, warehouseId: undefined, categoryId: undefined, segment: undefined };
   const options = can(session.user.appRole, "quotes:write")
     ? await getQuoteCreationOptions({ organizationId: session.user.organizationId, role: session.user.appRole })
     : null;
@@ -43,6 +50,12 @@ export default async function QuotesPage({ params, searchParams }: Props) {
     const query = new URLSearchParams();
     if (filters.q) query.set("q", filters.q);
     if (filters.status !== "all") query.set("status", filters.status);
+    if (filters.funnelStage) query.set("funnelStage", filters.funnelStage);
+    if (filters.from) query.set("from", filters.from);
+    if (filters.to) query.set("to", filters.to);
+    if (filters.warehouseId) query.set("warehouseId", filters.warehouseId);
+    if (filters.categoryId) query.set("categoryId", filters.categoryId);
+    if (filters.segment) query.set("segment", filters.segment);
     if (page > 1) query.set("page", String(page));
     const serialized = query.toString();
     return `/${locale}/sales/quotes${serialized ? `?${serialized}` : ""}`;
@@ -51,6 +64,12 @@ export default async function QuotesPage({ params, searchParams }: Props) {
     const query = new URLSearchParams();
     if (filters.q) query.set("q", filters.q);
     if (filters.status !== "all") query.set("status", filters.status);
+    if (filters.funnelStage) query.set("funnelStage", filters.funnelStage);
+    if (filters.from) query.set("from", filters.from);
+    if (filters.to) query.set("to", filters.to);
+    if (filters.warehouseId) query.set("warehouseId", filters.warehouseId);
+    if (filters.categoryId) query.set("categoryId", filters.categoryId);
+    if (filters.segment) query.set("segment", filters.segment);
     if (filters.page > 1) query.set("page", String(filters.page));
     const serialized = query.toString();
     return `/${locale}/sales/quotes/${quoteId}${serialized ? `?${serialized}` : ""}`;
@@ -80,6 +99,8 @@ export default async function QuotesPage({ params, searchParams }: Props) {
     </section>}
 
     {result && <>
+      {(filters.warehouseId || filters.categoryId || filters.segment) && <p className="invoice-scope-note">{t("dashboardScopeActive")} <Link href={`/${locale}/sales/quotes`}>{t("clearFilters")}</Link></p>}
+      {filters.funnelStage && <p className="invoice-scope-note">{t("funnelStageActive", { stage: t(`funnelStages.${filters.funnelStage}`) })} <Link href={`/${locale}/sales/quotes`}>{t("clearFilters")}</Link></p>}
       <section className="quote-ledger-intro" aria-label={t("ledgerSummary")}>
         <div className="quote-ledger-mark"><FileText size={19} /></div>
         <div><strong>{t("ledgerSummary")}</strong><p>{t("ledgerSummaryDescription")}</p></div>
@@ -89,8 +110,14 @@ export default async function QuotesPage({ params, searchParams }: Props) {
       <section className="quote-list-section" aria-labelledby="quote-list-title">
         <div className="section-heading"><div><div className="section-title-line"><h2 id="quote-list-title">{t("quoteLedger")}</h2><span className="table-count">{String(result.total).padStart(2, "0")}</span></div><p>{t("quoteListDescription")}</p></div></div>
         <div className="table-frame">
-          <form className="customer-filters" action={`/${locale}/sales/quotes`} method="get">
+          <form className="customer-filters quote-filters" action={`/${locale}/sales/quotes`} method="get">
             <label className="customer-search"><Search size={15} /><span className="sr-only">{t("searchLabel")}</span><input type="search" name="q" maxLength={80} defaultValue={filters.q} placeholder={t("searchPlaceholder")} /></label>
+            <label className="quote-date-filter"><span>{t("from")}</span><input type="date" name="from" defaultValue={filters.from} /></label>
+            <label className="quote-date-filter"><span>{t("to")}</span><input type="date" name="to" defaultValue={filters.to} /></label>
+            {filters.warehouseId && <input type="hidden" name="warehouseId" value={filters.warehouseId} />}
+            {filters.categoryId && <input type="hidden" name="categoryId" value={filters.categoryId} />}
+            {filters.segment && <input type="hidden" name="segment" value={filters.segment} />}
+            {filters.funnelStage && <input type="hidden" name="funnelStage" value={filters.funnelStage} />}
             <label className="customer-segment-filter"><span>{t("filterStatus")}</span><select name="status" defaultValue={filters.status}>
               <option value="all">{t("allStatuses")}</option>
               <option value="draft">{t("statusLabels.draft")}</option>
@@ -101,7 +128,7 @@ export default async function QuotesPage({ params, searchParams }: Props) {
               <option value="converted">{t("statusLabels.converted")}</option>
             </select></label>
             <button type="submit" className="customer-filter-button">{t("applyFilters")} <ArrowRight size={14} /></button>
-            {(filters.q || filters.status !== "all") && <Link className="customer-clear-link" href={`/${locale}/sales/quotes`}>{t("clearFilters")}</Link>}
+            {(filters.q || filters.status !== "all" || filters.funnelStage || filters.from || filters.to || filters.warehouseId || filters.categoryId || filters.segment) && <Link className="customer-clear-link" href={`/${locale}/sales/quotes`}>{t("clearFilters")}</Link>}
           </form>
           <div className="table-scroll"><table className="product-table quotes-table">
             <thead><tr><th>{t("number")}</th><th>{t("customer")}</th><th>{t("status")}</th><th>{t("validUntil")}</th><th className="align-right">{t("items")}</th><th className="align-right">{t("total")}</th><th scope="col" aria-label={t("openQuote")} /></tr></thead>

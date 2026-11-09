@@ -2,7 +2,7 @@
 
 > Implementation handoff for Luna.
 > Source: `spec/ERP Showcase — Product & Technical Spec.md`.
-> Status: Foundations and the order-to-payment vertical slice pass local PostgreSQL, integration, browser, and accessibility checks. Customer directory/detail and quote lifecycle/conversion are implemented and verified locally. Milestone 1 continues with invoice screens and the executive dashboard; full Inventory and Finance modules follow later.
+> Status: **Milestone 1 is complete locally and has passed the review-fix release gate.** Sales and dashboard (metrics/charts 1–5) pass local PostgreSQL, unit, browser, accessibility, and production-build checks. Full Inventory and Finance modules remain later milestones.
 
 > **Current owner direction:** work locally using native PostgreSQL, without Docker. Use an isolated project cluster/database and leave existing services/data untouched. Later deploy the normal GitHub repository to Vercel Hobby (free tier), with Neon Free managed PostgreSQL. No cloud resources or paid plans now.
 
@@ -377,7 +377,7 @@ Prove that:
 
 Do this before investing in a large polished dashboard.
 
-Current vertical-slice routes are `/sales/orders` and `/sales/orders/[id]`. The form creates/edits one line at a time; the service accepts a bounded set of lines. Multiple-line UI, server-side table filters/pagination, quotes, customer details, invoice module screens, and dashboard charts remain for the rest of Milestone 1.
+The `/sales/orders` ledger has URL-backed search, status, date, dimension, sorting, and pagination. Draft create/edit forms support multiple product lines and are bounded by the order service. Customer, quote, and invoice list/detail routes and dashboard charts 1–5 are complete for this milestone.
 
 ### 6.2 Sales screens
 
@@ -404,7 +404,7 @@ Build independent query sources for:
 - Confirmed orders.
 - Quote cohort conversion.
 - AR aging.
-- Current and historical inventory.
+- Current inventory snapshot where already available; historical inventory analytics are deferred to Milestone 2.
 
 Choose aggregate dimensions from actual widget requirements. Customer/segment drill-downs need supporting dimensions; the spec's illustrative daily sales aggregate is not sufficient for every chart.
 
@@ -423,7 +423,7 @@ Reject malformed values and limit expensive date ranges.
 Implement:
 
 - Executive overview plus Sales/Inventory/Finance views as appropriate permissions and queries become available.
-- KPI cards with exact tooltips, sparklines, direction icons, and comparisons.
+- KPI cards with exact-value titles, sparklines, direction icons, and comparisons.
 - Charts 1–5: revenue trend, category revenue, top customers/products, sales funnel, and AR aging.
 - URL-based state and shareable views.
 - Per-widget Suspense skeletons and error/retry behavior.
@@ -440,6 +440,12 @@ Keep the executive overview focused: a few primary KPIs and charts above the fol
 - Full lifecycle tests pass against PostgreSQL.
 - Unauthorized financial fields never reach Warehouse users.
 - Every dashboard query uses the query wrapper.
+
+### Milestone 1 verification status
+
+- **Complete locally:** order list/detail and multi-line draft lifecycle, customer list/detail, quote list/detail and conversion, invoice list/detail and as-of payments, and executive dashboard URL filters/KPIs/charts 1–5.
+- **Verified:** `npm run lint`, `npm run typecheck`, `npm test`, `npm run db:check`, `npm run verify:foundations`, `npm run verify:orders`, `npm run verify:customers`, `npm run verify:quotes`, `npm run verify:invoices`, and `npm run build`.
+- The dashboard's current organization-wide product catalogue is explicitly identified as a snapshot outside the sales filter scope. Historical inventory analytics and the full Inventory/Finance interfaces remain in their later milestones.
 
 ## 7. Milestone 2 — Inventory
 
@@ -820,6 +826,6 @@ Consult current documentation for the pinned framework/library versions, follow 
 
 > Completed: local PostgreSQL setup, role login, bilingual shell, seeded catalogue, query instrumentation, and copilot placeholder.
 
-### Current checkpoint: quote lifecycle and conversion
+### Current checkpoint: Milestone 1 complete
 
-> Completed locally: Admin/Sales Manager quote list and detail routes, validated search/status/pagination, editable drafts, date-bound send/accept/reject lifecycle, immutable price snapshots, transactional idempotent conversion into a draft order, audit history, and FR/EN copy. Migration `0006_cooing_the_spike` adds quotes/quote lines and the order source reference. Next bounded task: invoice list/detail screens using the existing invoice and payment data. Continue Milestone 1 only; do not begin full Inventory/Finance modules, simulation, or AI. Before pushing, run unit tests, PostgreSQL integration, browser behavior, accessibility, and production build locally.
+> Completed locally: Milestone 1 Sales and dashboard scope, including invoice balances/payment history, URL-driven executive filters and metrics, charts 1–5, multi-line orders, and server-paginated/filterable Sales tables. Local PostgreSQL, browser, role, localization, and production-build checks passed. Do not include full Inventory/Finance modules, simulation, or AI in this milestone. Historical inventory analytics remain deferred.

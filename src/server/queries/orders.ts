@@ -1,6 +1,8 @@
-import { and, asc, count, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gte, ilike, lt, or, sql } from "drizzle-orm";
+import { addCalendarDays, businessDateStart } from "@/lib/dates/business-date";
+import type { OrderFilters } from "@/lib/orders/filters";
 import { getDb } from "@/server/db";
-import { customers, invoices, payments, products, salesOrderLines, salesOrders, warehouses } from "@/server/db/schema";
+import { categories, customers, invoices, payments, products, salesOrderLines, salesOrders, warehouses } from "@/server/db/schema";
 import { can, type AppRole } from "@/server/auth/permissions";
 import { withQueryTrace } from "@/server/observability/query-trace";
 
@@ -18,29 +20,85 @@ function assertPermission(role: AppRole, permission: string) {
   if (!can(role, permission)) throw new Error("FORBIDDEN");
 }
 
-export async function listSalesOrders(input: { organizationId: string; role: AppRole }) {
+function orderFilterConditions(input: { organizationId: string; filters: OrderFilters }) {
+  const conditions = [eq(salesOrders.organizationId, input.organizationId)];
+  if (input.filters.status !== "all") conditions.push(eq(salesOrders.status, input.filters.status));
+  if (input.filters.customerId) conditions.push(eq(salesOrders.customerId, input.filters.customerId));
+  if (input.filters.warehouseId) conditions.push(eq(salesOrders.warehouseId, input.filters.warehouseId));
+  if (input.filters.categoryId) {
+    const matchingOrderLine = getDb().select({ id: salesOrderLines.id }).from(salesOrderLines)
+      .innerJoin(products, and(eq(products.id, salesOrderLines.productId), eq(products.organizationId, salesOrderLines.organizationId)))
+      .where(and(
+        eq(salesOrderLines.orderId, salesOrders.id),
+        eq(salesOrderLines.organizationId, input.organizationId),
+        eq(products.categoryId, input.filters.categoryId),
+      ));
+    conditions.push(exists(matchingOrderLine));
+  }
+  if (input.filters.segment) conditions.push(eq(customers.segment, input.filters.segment));
+  const dateColumn = input.filters.dateBasis === "confirmedAt" ? salesOrders.confirmedAt : salesOrders.orderDate;
+  if (input.filters.from) conditions.push(gte(dateColumn, businessDateStart(input.filters.from)));
+  if (input.filters.to) conditions.push(lt(dateColumn, businessDateStart(addCalendarDays(input.filters.to, 1))));
+  if (input.filters.q) {
+    const pattern = `%${input.filters.q.replace(/[\\%_]/g, "\\$&")}%`;
+    conditions.push(or(ilike(salesOrders.orderNumber, pattern), ilike(customers.name, pattern))!);
+  }
+  return and(...conditions);
+}
+
+export async function listSalesOrders(input: { organizationId: string; role: AppRole; filters: OrderFilters }) {
   assertPermission(input.role, "orders:read");
   const db = getDb();
+  const where = orderFilterConditions(input);
+  const financial = can(input.role, "dashboard:finance:read");
+  if (input.filters.sort === "total" && !financial) throw new Error("FORBIDDEN");
+  const countQuery = db.select({ total: count() }).from(salesOrders)
+    .innerJoin(customers, and(eq(customers.id, salesOrders.customerId), eq(customers.organizationId, salesOrders.organizationId)))
+    .where(where);
+  const sortColumn = {
+    orderDate: input.filters.dateBasis === "confirmedAt" ? salesOrders.confirmedAt : salesOrders.orderDate,
+    orderNumber: salesOrders.orderNumber,
+    customer: customers.name,
+    status: salesOrders.status,
+    total: sql<number>`coalesce(sum(${salesOrderLines.quantity} * ${salesOrderLines.unitPriceMinor}), 0)::int`,
+  }[input.filters.sort];
+  const direction = input.filters.direction === "asc" ? asc : desc;
   const query = db.select({
     id: salesOrders.id,
     orderNumber: salesOrders.orderNumber,
     customerName: customers.name,
     status: salesOrders.status,
     orderDate: salesOrders.orderDate,
+    confirmedAt: salesOrders.confirmedAt,
     itemCount: sql<number>`count(${salesOrderLines.id})::int`,
-    totalMinor: can(input.role, "dashboard:finance:read")
+    totalMinor: financial
       ? sql<number>`coalesce(sum(${salesOrderLines.quantity} * ${salesOrderLines.unitPriceMinor}), 0)::int`
       : sql<null>`NULL`,
   }).from(salesOrders)
     .innerJoin(customers, and(eq(customers.id, salesOrders.customerId), eq(customers.organizationId, salesOrders.organizationId)))
     .leftJoin(salesOrderLines, and(eq(salesOrderLines.orderId, salesOrders.id), eq(salesOrderLines.organizationId, salesOrders.organizationId)))
-    .where(eq(salesOrders.organizationId, input.organizationId))
+    .where(where)
     .groupBy(salesOrders.id, customers.name)
-    .orderBy(sql`${salesOrders.orderDate} DESC`)
-    .limit(100);
+    .orderBy(direction(sortColumn), direction(salesOrders.id))
+    .limit(25)
+    .offset((input.filters.page - 1) * 25);
+  const filters = { organizationId: input.organizationId, status: input.filters.status, page: input.filters.page, sort: input.filters.sort, direction: input.filters.direction, dateBasis: input.filters.dateBasis, hasSearch: Boolean(input.filters.q), hasRange: Boolean(input.filters.from), financial };
+  const [[summary], rows] = await Promise.all([
+    withQueryTrace({ name: "sales.orders.count", source: "sales_orders + customers", permission: "orders:read", sqlTemplate: countQuery.toSQL().sql, filters }, () => countQuery),
+    withQueryTrace({ name: "sales.orders.list", source: "sales_orders + customers + sales_order_lines", permission: "orders:read", sqlTemplate: query.toSQL().sql, filters }, () => query),
+  ]);
+  const total = Number(summary?.total ?? 0);
+  return { rows, total, page: input.filters.page, pageSize: 25, totalPages: Math.ceil(total / 25) };
+}
+
+export async function getOrderFilterOptions(input: { organizationId: string; role: AppRole }) {
+  assertPermission(input.role, "orders:read");
+  const db = getDb();
+  const query = db.select({ id: categories.id, name: categories.name }).from(categories)
+    .where(eq(categories.organizationId, input.organizationId)).orderBy(asc(categories.name), asc(categories.id));
   return withQueryTrace({
-    name: "sales.orders.list",
-    source: "sales_orders + customers + sales_order_lines",
+    name: "sales.orders.options.categories",
+    source: "categories",
     permission: "orders:read",
     sqlTemplate: query.toSQL().sql,
     filters: { organizationId: input.organizationId },

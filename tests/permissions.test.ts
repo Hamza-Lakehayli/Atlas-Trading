@@ -36,6 +36,7 @@ describe("application role permissions", () => {
 
   it("keeps viewer access read-only and admin access broad", () => {
     expect(can("viewer", "orders:write")).toBe(false);
+    expect(can("viewer", "invoices:read")).toBe(false);
     expect(can("viewer", "payments:record")).toBe(false);
     expect(can("admin", "payments:record")).toBe(true);
     expect(can("admin", "users:manage")).toBe(true);

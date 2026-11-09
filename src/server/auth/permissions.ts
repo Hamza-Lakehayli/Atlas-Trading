@@ -6,7 +6,7 @@ export const permissionMatrix = {
   sales_manager: ["dashboard:sales:read", "dashboard:finance:read", "customers:read", "quotes:read", "quotes:write", "orders:read", "orders:write", "orders:invoice", "inventory:read", "invoices:read", "payments:read"],
   warehouse: ["dashboard:sales:read", "orders:read", "orders:ship", "inventory:read", "inventory:adjust", "inventory:transfer"],
   accountant: ["dashboard:sales:read", "dashboard:finance:read", "quotes:read", "orders:read", "orders:invoice", "inventory:read", "invoices:read", "payments:read", "payments:record"],
-  viewer: ["dashboard:sales:read", "dashboard:finance:read", "inventory:read", "invoices:read"],
+  viewer: ["dashboard:sales:read", "dashboard:finance:read", "inventory:read"],
 } as const satisfies Record<AppRole, readonly string[]>;
 
 export type Permission = (typeof permissionMatrix)[AppRole][number];

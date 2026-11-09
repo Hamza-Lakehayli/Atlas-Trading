@@ -6,10 +6,12 @@ import { z } from "zod";
 import { ArrowLeft, ArrowRight, Check, CircleDollarSign, PackageCheck, ReceiptText } from "lucide-react";
 import { can, isAppRole } from "@/server/auth/permissions";
 import { requireSession } from "@/server/auth/session";
+import { parseOrderFilters } from "@/lib/orders/filters";
+import { OrderLineFields } from "@/components/sales/order-line-fields";
 import { getOrderCreationOptions, getSalesOrderDetail } from "@/server/queries/orders";
 import { cancelOrderAction, confirmOrderAction, issueInvoiceAction, recordPaymentAction, shipOrderAction, updateDraftOrderAction } from "../actions";
 
-type Props = { params: Promise<{ locale: string; id: string }>; searchParams: Promise<{ error?: string }> };
+type Props = { params: Promise<{ locale: string; id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 export default async function SalesOrderDetailPage({ params, searchParams }: Props) {
   const { locale, id } = await params;
@@ -22,7 +24,8 @@ export default async function SalesOrderDetailPage({ params, searchParams }: Pro
   const editOptions = detail.order.status === "draft" && detail.canConfirm
     ? await getOrderCreationOptions({ organizationId: session.user.organizationId, role: session.user.appRole })
     : null;
-  const { error } = await searchParams;
+  const rawSearchParams = await searchParams;
+  const error = rawSearchParams.error;
   const { order, lines, invoice } = detail;
   const statusLabels = {
     draft: t("statusLabels.draft"), confirmed: t("statusLabels.confirmed"), shipped: t("statusLabels.shipped"),
@@ -40,11 +43,26 @@ export default async function SalesOrderDetailPage({ params, searchParams }: Pro
     ? lines.reduce((sum, line) => sum + line.quantity * (line.unitPriceMinor ?? 0), 0)
     : null;
   const outstanding = invoice ? invoice.totalMinor - invoice.paidMinor : 0;
-  const errorKey = error && ["VALIDATION_ERROR", "FORBIDDEN", "NOT_FOUND", "CONFLICT", "INSUFFICIENT_STOCK", "INVALID_TRANSITION", "INTERNAL"].includes(error)
+  const errorKey = typeof error === "string" && ["VALIDATION_ERROR", "FORBIDDEN", "NOT_FOUND", "CONFLICT", "INSUFFICIENT_STOCK", "INVALID_TRANSITION", "INTERNAL"].includes(error)
     ? error : null;
+  const parsedListFilters = parseOrderFilters({
+    q: rawSearchParams.q, status: rawSearchParams.status, dateBasis: rawSearchParams.dateBasis, from: rawSearchParams.from, to: rawSearchParams.to,
+    customerId: rawSearchParams.customerId, warehouseId: rawSearchParams.warehouseId,
+    categoryId: rawSearchParams.categoryId, segment: rawSearchParams.segment,
+    sort: rawSearchParams.sort, direction: rawSearchParams.direction, page: rawSearchParams.page,
+  });
+  const backQuery = new URLSearchParams();
+  if (parsedListFilters.success) {
+    for (const key of ["q", "status", "dateBasis", "from", "to", "customerId", "warehouseId", "categoryId", "segment", "sort", "direction"] as const) {
+      const value = parsedListFilters.data[key];
+      if (typeof value === "string" && value && !(key === "status" && value === "all") && !(key === "dateBasis" && value === "orderDate") && !(key === "sort" && value === "orderDate") && !(key === "direction" && value === "desc")) backQuery.set(key, value);
+    }
+    if (parsedListFilters.data.page > 1) backQuery.set("page", String(parsedListFilters.data.page));
+  }
+  const backQueryString = backQuery.toString();
 
   return <div className="order-detail-page">
-    <Link className="back-link" href={`/${locale}/sales/orders`}><ArrowLeft size={15} /> {t("backToOrders")}</Link>
+    <Link className="back-link" href={`/${locale}/sales/orders${backQueryString ? `?${backQueryString}` : ""}`}><ArrowLeft size={15} /> {t("backToOrders")}</Link>
     {errorKey && <p className="order-alert" role="alert">{errorMessages[errorKey as keyof typeof errorMessages] ?? errorMessages.INTERNAL}</p>}
     <section className="order-detail-heading">
       <div><p className="page-kicker">ATLAS / SALES / {order.orderNumber}</p><h1>{order.orderNumber}</h1><p className="page-subtitle">{order.customerName} <span aria-hidden="true">·</span> {order.warehouseName}</p></div>
@@ -53,14 +71,13 @@ export default async function SalesOrderDetailPage({ params, searchParams }: Pro
 
     <div className="order-detail-grid">
       <div className="order-main-column">
-        {editOptions && detail.lines.length <= 1 && <section className="order-content-panel draft-edit-panel">
+        {editOptions && <section className="order-content-panel draft-edit-panel">
           <div className="order-content-title"><div><h2>{t("editDraft")}</h2><p>{t("editDraftHelp")}</p></div></div>
           <form action={updateDraftOrderAction} className="draft-edit-form">
             <input type="hidden" name="locale" value={locale} /><input type="hidden" name="orderId" value={order.id} /><input type="hidden" name="idempotencyKey" value={randomUUID()} />
             <label><span>{t("customer")}</span><select name="customerId" defaultValue={order.customerId} required>{editOptions.customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
             <label><span>{t("warehouse")}</span><select name="warehouseId" defaultValue={order.warehouseId} required>{editOptions.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>
-            <label><span>{t("product")}</span><select name="productId" defaultValue={detail.lines[0]?.productId ?? ""} required>{editOptions.products.map((product) => <option key={product.id} value={product.id}>{product.sku} · {product.name}</option>)}</select></label>
-            <label><span>{t("quantity")}</span><input type="number" name="quantity" min="1" max="999" defaultValue={detail.lines[0]?.quantity ?? 1} required /></label>
+             <OrderLineFields products={editOptions.products} initialLines={detail.lines.map((line) => ({ productId: line.productId, quantity: line.quantity }))} labels={{ product: t("product"), quantity: t("quantity"), chooseProduct: t("chooseProduct"), addLine: t("addLine"), additionalLine: t("additionalLine"), removeLine: t("removeLine") }} />
             <button className="order-primary-button" type="submit">{t("saveDraft")}</button>
           </form>
         </section>}
@@ -72,7 +89,7 @@ export default async function SalesOrderDetailPage({ params, searchParams }: Pro
         </section>
 
         {invoice && <section className="order-content-panel invoice-panel">
-          <div className="order-content-title"><div><h2><ReceiptText size={17} /> {t("invoiceTitle", { number: invoice.number })}</h2><p>{invoiceStatusLabels[invoice.status as keyof typeof invoiceStatusLabels] ?? invoice.status}</p></div><strong>{money(invoice.totalMinor)}</strong></div>
+          <div className="order-content-title"><div><h2><ReceiptText size={17} /> {t("invoiceTitle", { number: invoice.number })}</h2><p>{invoiceStatusLabels[invoice.status as keyof typeof invoiceStatusLabels] ?? invoice.status}</p><Link className="invoice-open-link" href={`/${locale}/sales/invoices/${invoice.id}`}>{t("openInvoice")}</Link></div><strong>{money(invoice.totalMinor)}</strong></div>
           <div className="invoice-facts"><div><span>{t("dueDate")}</span><b>{date(invoice.dueDate)}</b></div><div><span>{t("paid")}</span><b>{money(invoice.paidMinor)}</b></div><div><span>{t("outstanding")}</span><b>{money(outstanding)}</b></div></div>
           <p className="payment-note">{t("paymentNote")}</p>
         </section>}

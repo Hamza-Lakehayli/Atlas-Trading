@@ -54,6 +54,10 @@ async function main() {
       assert.doesNotMatch(html, /class="align-right money-cell"/);
       assert.doesNotMatch(html, />Finance<\/span>/);
     }
+    if (name === "Lina") {
+      assert.doesNotMatch(html, /href="\/en\/sales\/(invoices|quotes|orders)/);
+      assert.match(html, /Revenue over time/);
+    }
     const french = await fetch(`${origin}/fr/dashboard`, { headers: { Cookie: cookie } });
     assert.match(await french.text(), new RegExp(`Bonjour, ${name}`));
     const copilot = await fetch(`${origin}/en/copilot`, { headers: { Cookie: cookie } });
@@ -68,7 +72,10 @@ async function main() {
   }
 }
 
-main().catch(() => {
-  console.error("Foundation verification failed. Check the local app/database, seed data, and role behavior; no session or credential values are logged.");
+main().catch((error: unknown) => {
+  const safeDetail = error instanceof assert.AssertionError
+    ? error.message.split("\n").slice(0, 3).join(" ")
+    : error instanceof Error ? error.message.replace(/postgres(?:ql)?:\/\/\S+/gi, "<redacted-database-url>").slice(0, 180) : "unknown verification error";
+  console.error(`Foundation verification failed (${safeDetail}). Check the local app/database, seed data, and role behavior; no session or credential values are logged.`);
   process.exitCode = 1;
 });

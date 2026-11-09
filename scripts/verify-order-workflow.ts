@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../src/server/db";
 import { auditLogs, categories, customers, idempotencyKeys, invoices, organizations, payments, products, salesOrderLines, salesOrders, stockLevels, stockMovements, users, warehouses } from "../src/server/db/schema";
 import { getMigrationDatabaseUrl } from "../src/lib/env";
 import { type ServiceContext } from "../src/server/services/context";
 import { OrderDomainError, cancelOrder, confirmOrder, createDraftOrder, issueInvoice, recordPayment, shipOrder, updateDraftOrder } from "../src/server/services/orders";
 import { getSalesOrderDetail, listSalesOrders } from "../src/server/queries/orders";
+import { parseOrderFilters } from "../src/lib/orders/filters";
 
 function assertLocalDatabase() {
   const url = new URL(getMigrationDatabaseUrl());
@@ -30,7 +31,7 @@ async function main() {
   const db = getDb();
   const testToken = crypto.randomUUID();
   const [org] = await db.insert(organizations).values({ name: `__local_order_test_${testToken}` }).returning();
-  let productId: string | undefined;
+  const productIds: string[] = [];
   let customerId: string | undefined;
   try {
     const actors = await db.insert(users).values([
@@ -40,6 +41,7 @@ async function main() {
     ]).returning();
     const [adminActor, warehouseActor, accountantActor] = actors;
     const [category] = await db.insert(categories).values({ organizationId: org.id, name: "Workflow test" }).returning();
+    const [secondCategory] = await db.insert(categories).values({ organizationId: org.id, name: "Workflow second category" }).returning();
     const [warehouse] = await db.insert(warehouses).values({ organizationId: org.id, name: "Workflow test", city: "Casablanca" }).returning();
     const [customer] = await db.insert(customers).values({ organizationId: org.id, name: "Workflow test customer", segment: "Retail", city: "Casablanca", paymentTermsDays: 30 }).returning();
     customerId = customer.id;
@@ -52,8 +54,19 @@ async function main() {
       unitPriceMinor: 1000,
       reorderPoint: 1,
     }).returning();
-    productId = product.id;
+    productIds.push(product.id);
+    const [secondProduct] = await db.insert(products).values({
+      organizationId: org.id,
+      categoryId: secondCategory.id,
+      sku: `TEST2-${testToken.slice(0, 8)}`,
+      name: "Workflow second test product",
+      unitCostMinor: 200,
+      unitPriceMinor: 600,
+      reorderPoint: 1,
+    }).returning();
+    productIds.push(secondProduct.id);
     await db.insert(stockLevels).values({ organizationId: org.id, productId: product.id, warehouseId: warehouse.id, quantity: 5, averageUnitCostMinor: 400 });
+    await db.insert(stockLevels).values({ organizationId: org.id, productId: secondProduct.id, warehouseId: warehouse.id, quantity: 5, averageUnitCostMinor: 200 });
 
     const context: ServiceContext = { actorId: adminActor.id, organizationId: org.id, role: "admin" };
     const warehouseContext: ServiceContext = { actorId: warehouseActor.id, organizationId: org.id, role: "warehouse" };
@@ -83,14 +96,15 @@ async function main() {
       orderId: editableDraft.resourceId,
       customerId: customer.id,
       warehouseId: warehouse.id,
-      lines: [{ productId: product.id, quantity: 3 }],
+      lines: [{ productId: product.id, quantity: 3 }, { productId: secondProduct.id, quantity: 2 }],
       idempotencyKey: editKey,
     };
     await updateDraftOrder(context, editInput);
     const replayEdit = await updateDraftOrder(context, editInput);
     assert.equal(replayEdit.replayed, true);
-    const [editedLine] = await db.select({ quantity: salesOrderLines.quantity }).from(salesOrderLines).where(eq(salesOrderLines.orderId, editableDraft.resourceId));
-    assert.equal(editedLine.quantity, 3);
+    const editedLines = await db.select({ productId: salesOrderLines.productId, quantity: salesOrderLines.quantity }).from(salesOrderLines).where(eq(salesOrderLines.orderId, editableDraft.resourceId));
+    assert.equal(editedLines.length, 2);
+    assert.deepEqual(new Map(editedLines.map((line) => [line.productId, line.quantity])), new Map([[product.id, 3], [secondProduct.id, 2]]));
     await confirmOrder(context, { orderId: editableDraft.resourceId, idempotencyKey: key() });
     await expectCode(updateDraftOrder(context, { ...editInput, idempotencyKey: key(), lines: [{ productId: product.id, quantity: 4 }] }), "INVALID_TRANSITION");
 
@@ -123,9 +137,19 @@ async function main() {
     assert.ok(warehouseOrder);
     assert.equal(Object.hasOwn(warehouseOrder.lines[0], "unitPriceMinor"), false);
     assert.equal(warehouseOrder.invoice, null);
-    const warehouseList = await listSalesOrders({ organizationId: org.id, role: "warehouse" });
-    assert.equal(warehouseList[0].totalMinor, null);
-    await assert.rejects(listSalesOrders({ organizationId: org.id, role: "viewer" }), /FORBIDDEN/);
+    const orderFilters = parseOrderFilters({});
+    assert.ok(orderFilters.success);
+    const warehouseList = await listSalesOrders({ organizationId: org.id, role: "warehouse", filters: orderFilters.data });
+    assert.equal(warehouseList.rows[0].totalMinor, null);
+    const drilldownFilters = parseOrderFilters({ categoryId: category.id, segment: "Retail", sort: "total", direction: "desc" });
+    assert.ok(drilldownFilters.success);
+    const financeOrderList = await listSalesOrders({ organizationId: org.id, role: "admin", filters: drilldownFilters.data });
+    assert.equal(financeOrderList.total, 3, "Order list dimension filters preserve line-based dashboard drill-downs");
+    const multiLineFilteredOrder = financeOrderList.rows.find((row) => row.id === editableDraft.resourceId);
+    assert.equal(multiLineFilteredOrder?.itemCount, 2);
+    assert.equal(multiLineFilteredOrder?.totalMinor, 4_200, "Category filtering finds the order without truncating its full total");
+    await assert.rejects(listSalesOrders({ organizationId: org.id, role: "warehouse", filters: drilldownFilters.data }), /FORBIDDEN/);
+    await assert.rejects(listSalesOrders({ organizationId: org.id, role: "viewer", filters: orderFilters.data }), /FORBIDDEN/);
     await expectCode(issueInvoice(warehouseContext, { orderId: draft.resourceId, idempotencyKey: key() }), "FORBIDDEN");
 
     const invoiceKey = key();
@@ -169,7 +193,7 @@ async function main() {
     await db.delete(salesOrderLines).where(eq(salesOrderLines.organizationId, org.id));
     await db.delete(salesOrders).where(eq(salesOrders.organizationId, org.id));
     await db.delete(stockLevels).where(eq(stockLevels.organizationId, org.id));
-    if (productId) await db.delete(products).where(eq(products.id, productId));
+     if (productIds.length) await db.delete(products).where(inArray(products.id, productIds));
     await db.delete(warehouses).where(eq(warehouses.organizationId, org.id));
     if (customerId) await db.delete(customers).where(eq(customers.id, customerId));
     await db.delete(categories).where(eq(categories.organizationId, org.id));

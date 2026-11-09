@@ -1,9 +1,10 @@
-import { and, asc, count, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gte, ilike, isNotNull, lt, or, sql } from "drizzle-orm";
+import { addCalendarDays, businessDateStart } from "@/lib/dates/business-date";
 import { businessDate, isDateExpired } from "@/lib/dates/business-date";
 import type { QuoteFilters } from "@/lib/quotes/filters";
 import { can, type AppRole } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
-import { customers, products, quoteLines, quotes, salesOrders, warehouses } from "@/server/db/schema";
+import { customers, invoices, products, quoteLines, quotes, salesOrders, warehouses } from "@/server/db/schema";
 import { withQueryTrace } from "@/server/observability/query-trace";
 
 const pageSize = 25;
@@ -24,10 +25,39 @@ function listConditions(input: { organizationId: string; filters: QuoteFilters; 
     conditions.push(eq(quotes.status, input.filters.status));
     if (input.filters.status === "sent") conditions.push(sql`${quotes.validUntil} >= ${input.today}`);
   }
+  if (input.filters.funnelStage === "sent") conditions.push(isNotNull(quotes.sentAt));
+  if (input.filters.funnelStage === "accepted") conditions.push(isNotNull(quotes.acceptedAt));
+  if (input.filters.funnelStage === "converted") conditions.push(eq(quotes.status, "converted"));
+  if (input.filters.funnelStage === "invoiced" || input.filters.funnelStage === "paid") {
+    const downstreamOrder = getDb().select({ id: salesOrders.id }).from(salesOrders)
+      .where(and(
+        eq(salesOrders.organizationId, input.organizationId),
+        eq(salesOrders.sourceQuoteId, quotes.id),
+        input.filters.funnelStage === "paid" ? eq(salesOrders.status, "paid") : undefined,
+        input.filters.funnelStage === "invoiced" ? exists(getDb().select({ id: invoices.id }).from(invoices).where(and(
+          eq(invoices.organizationId, input.organizationId), eq(invoices.orderId, salesOrders.id),
+        ))) : undefined,
+      ));
+    conditions.push(exists(downstreamOrder));
+  }
   if (input.filters.q) {
     const pattern = `%${escapeLike(input.filters.q)}%`;
     conditions.push(or(ilike(quotes.quoteNumber, pattern), ilike(customers.name, pattern))!);
   }
+  if (input.filters.from) conditions.push(gte(quotes.createdAt, businessDateStart(input.filters.from)));
+  if (input.filters.to) conditions.push(lt(quotes.createdAt, businessDateStart(addCalendarDays(input.filters.to, 1))));
+  if (input.filters.warehouseId) conditions.push(eq(quotes.warehouseId, input.filters.warehouseId));
+  if (input.filters.categoryId) {
+    const matchingQuoteLine = getDb().select({ id: quoteLines.id }).from(quoteLines)
+      .innerJoin(products, and(eq(products.id, quoteLines.productId), eq(products.organizationId, quoteLines.organizationId)))
+      .where(and(
+        eq(quoteLines.quoteId, quotes.id),
+        eq(quoteLines.organizationId, input.organizationId),
+        eq(products.categoryId, input.filters.categoryId),
+      ));
+    conditions.push(exists(matchingQuoteLine));
+  }
+  if (input.filters.segment) conditions.push(eq(customers.segment, input.filters.segment));
   return and(...conditions);
 }
 
@@ -58,7 +88,7 @@ export async function listQuotes(input: { organizationId: string; role: AppRole;
     .orderBy(desc(quotes.createdAt), desc(quotes.id))
     .limit(pageSize)
     .offset((input.filters.page - 1) * pageSize);
-  const filters = { organizationId: input.organizationId, status: input.filters.status, page: input.filters.page, hasSearch: Boolean(input.filters.q) };
+  const filters = { organizationId: input.organizationId, status: input.filters.status, ...(input.filters.funnelStage ? { funnelStage: input.filters.funnelStage } : {}), page: input.filters.page, hasSearch: Boolean(input.filters.q) };
   const [[summary], rows] = await Promise.all([
     withQueryTrace({ name: "sales.quotes.count", source: "quotes + customers", permission: "quotes:read", sqlTemplate: countQuery.toSQL().sql, filters }, () => countQuery),
     withQueryTrace({ name: "sales.quotes.list", source: "quotes + customers + quote_lines", permission: "quotes:read", sqlTemplate: rowsQuery.toSQL().sql, filters }, () => rowsQuery),
